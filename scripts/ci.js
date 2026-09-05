@@ -1,11 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {
   ALL_REPOSITORIES,
   BASE_BRANCHES,
-  GUI_DEPENDENCIES,
   GUI_REPOSITORIES,
-  LINKABLE_REPOSITORIES,
   NPM_REPOSITORIES
 } from './shared/constants.js';
 import {
@@ -63,7 +62,7 @@ const discoverRepositories = names => {
       continue;
     }
 
-    repositories.push({name, directory, installed: false, ready: true});
+    repositories.push({name, directory, ready: true});
   }
 
   return repositories;
@@ -110,104 +109,13 @@ const installRepository = repository => {
     ['install', '--frozen-lockfile'];
   printSection(`Installing ${repository.name} with ${command}`);
   const result = run(command, args, repository.directory);
-  if (result.status === 0) {
-    repository.installed = true;
-  } else {
+  if (result.status !== 0) {
     failures.push(`${repository.name}: ${command} ${args.join(' ')} failed`);
   }
 };
 
-const snapshotManifests = repositories => {
-  const snapshots = [];
-
-  for (const repository of repositories) {
-    for (const filename of ['package.json', 'pnpm-lock.yaml']) {
-      const file = path.join(repository.directory, filename);
-      const existed = fs.existsSync(file);
-      snapshots.push({
-        file,
-        existed,
-        contents: existed ? fs.readFileSync(file) : null
-      });
-    }
-  }
-
-  return snapshots;
-};
-
-const restoreManifests = snapshots => {
-  for (const snapshot of snapshots) {
-    if (snapshot.existed) {
-      const unchanged = fs.existsSync(snapshot.file) &&
-        fs.readFileSync(snapshot.file).equals(snapshot.contents);
-      if (!unchanged) fs.writeFileSync(snapshot.file, snapshot.contents);
-    } else if (fs.existsSync(snapshot.file)) {
-      fs.rmSync(snapshot.file);
-    }
-  }
-};
-
-const runPnpmLink = (repository, packageNames = []) => {
-  const args = ['link', ...packageNames];
-  const description = packageNames.length > 0 ?
-    `${repository.name} to ${packageNames.join(', ')}` :
-    repository.name;
-  printSection(`Linking ${description}`);
-
-  const result = run('pnpm', args, repository.directory);
-  if (result.status !== 0) {
-    failures.push(`${description}: pnpm link failed`);
-    return false;
-  }
-
-  return true;
-};
-
-const linkGuiRepositories = repositories => {
-  const findRepository = name => repositories.find(repository => repository.name === name);
-  const involved = GUI_REPOSITORIES
-    .map(findRepository)
-    .filter(repository => repository && repository.installed);
-  const snapshots = snapshotManifests(involved);
-
-  try {
-    const linkedRepositories = [];
-    for (const name of LINKABLE_REPOSITORIES) {
-      const repository = findRepository(name);
-      if (!repository?.installed) {
-        console.log(`Skipping pnpm link for ${name}: repository was not found or did not install successfully.`);
-        continue;
-      }
-
-      if (runPnpmLink(repository)) linkedRepositories.push(name);
-    }
-
-    const vm = findRepository('scratch-vm');
-    if (linkedRepositories.includes('scratch-parser') && linkedRepositories.includes('scratch-vm')) {
-      runPnpmLink(vm, ['scratch-parser']);
-    } else {
-      console.log('Skipping scratch-parser -> scratch-vm link: both packages must be registered successfully.');
-    }
-
-    const gui = findRepository('scratch-gui');
-    if (!gui?.installed) {
-      console.log('Skipping GUI dependency links: scratch-gui did not install successfully.');
-      return;
-    }
-
-    const guiDependencies = GUI_DEPENDENCIES.filter(name => linkedRepositories.includes(name));
-    if (guiDependencies.length > 0) {
-      runPnpmLink(gui, guiDependencies);
-    } else {
-      console.log('Skipping GUI dependency links: no dependencies were linked successfully.');
-    }
-  } finally {
-    restoreManifests(snapshots);
-  }
-};
-
 const printUsage = () => {
-  console.log('Usage: node scripts/ci.js <full|gui> [--preserve-branch]');
+  console.log('Usage: node scripts/ci.js <full|gui> [--preserve-branch] [--no-link]');
 };
 
 const argumentsList = process.argv.slice(2);
@@ -217,15 +125,23 @@ if (argumentsList.includes('--help')) {
 }
 
 const [mode, ...flags] = argumentsList;
-const unknownFlags = flags.filter(flag => flag !== '--preserve-branch');
+const unknownFlags = flags.filter(flag => !['--preserve-branch', '--no-link'].includes(flag));
 const preserveBranchCount = flags.filter(flag => flag === '--preserve-branch').length;
-if (!['full', 'gui'].includes(mode) || unknownFlags.length > 0 || preserveBranchCount > 1) {
+const noLinkCount = flags.filter(flag => flag === '--no-link').length;
+if (
+  !['full', 'gui'].includes(mode) ||
+  unknownFlags.length > 0 ||
+  preserveBranchCount > 1 ||
+  noLinkCount > 1
+) {
   printUsage();
   if (preserveBranchCount > 1) console.error('--preserve-branch can only be provided once.');
+  if (noLinkCount > 1) console.error('--no-link can only be provided once.');
   process.exit(2);
 }
 
 const preserveBranch = flags.includes('--preserve-branch');
+const noLink = flags.includes('--no-link');
 const repositoryNames = mode === 'full' ? ALL_REPOSITORIES : GUI_REPOSITORIES;
 const repositories = discoverRepositories(repositoryNames);
 
@@ -250,7 +166,15 @@ if (preserveBranch) {
 }
 for (const repository of repositories) installRepository(repository);
 
-linkGuiRepositories(repositories);
+if (noLink) {
+  printSection('Skipping repository links');
+} else {
+  printSection('Linking repositories');
+  const linkScript = fileURLToPath(new URL('./link.js', import.meta.url));
+  if (run(process.execPath, [linkScript]).status !== 0) {
+    failures.push('Repository linking failed');
+  }
+}
 
 if (failures.length > 0) {
   printSection('Completed with errors');

@@ -13,7 +13,7 @@ NitroBolt/
 
 Only recognized NitroBolt repositories that exist locally are used. Each CI command removes `node_modules`, checks out the repository's default branch unless branch preservation is enabled, and installs one repository at a time. `Nitron`, `scratch-storage`, and `scratchblocks` use `npm ci`. All other repositories use `pnpm install --frozen-lockfile`.
 
-When the relevant repositories are available, the commands register `scratch-vm`, `scratch-blocks`, `scratch-render`, `scratch-parser`, and `scratch-paint` with `pnpm link`. They then link `scratch-parser` into `scratch-vm` and link all available GUI dependencies with one combined command.
+When the relevant repositories are available, the link command registers `scratch-vm`, `scratch-blocks`, `scratch-render`, `scratch-parser`, and `scratch-paint` with `pnpm link`. It then links `scratch-parser` into `scratch-vm` and links all available GUI dependencies with one combined command. Both CI commands run the link command automatically after installation.
 
 ```
 scratch-parser -> scratch-vm
@@ -29,6 +29,7 @@ Any `package.json` and `pnpm-lock.yaml` changes made by `pnpm link` are reverted
 
 - `pnpm run full-ci` processes every locally available NitroBolt repository.
 - `pnpm run gui-ci` processes only `scratch-gui`, `scratch-vm`, `scratch-blocks`, `scratch-paint`, `scratch-render`, and `scratch-parser`.
+- `pnpm run link` links all locally available GUI repositories together.
 - `pnpm run checkout` checks out a matching branch in every locally available NitroBolt repository that contains it.
 - `pnpm run sync` safely synchronizes the current branch of every locally available NitroBolt repository.
 - `pnpm run experiment` builds the current `scratch-gui` feature branch and publishes it to the local `experiments` repository.
@@ -50,6 +51,25 @@ The optional `--preserve-branch` flag keeps every repository on its current bran
 pnpm run full-ci --preserve-branch
 pnpm run gui-ci --preserve-branch
 ```
+
+The optional `--no-link` flag skips automatic repository linking after installation:
+
+```sh
+pnpm run full-ci --no-link
+pnpm run gui-ci --no-link
+```
+
+Both optional flags can be used together.
+
+## Linking repositories
+
+Run the link command without arguments to recreate links without reinstalling repositories:
+
+```sh
+pnpm run link
+```
+
+Only locally available repositories are used. The command preserves existing `package.json` and `pnpm-lock.yaml` contents while creating the links.
 
 ## Checking out a branch across repositories
 

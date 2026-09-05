@@ -7,6 +7,7 @@
   "scripts": {
     "full-ci": "node scripts/ci.js full",
     "gui-ci": "node scripts/ci.js gui",
+    "link": "node scripts/link.js",
     "checkout": "node scripts/checkout.js",
     "sync": "node scripts/sync.js",
     "experiment": "node scripts/experiment.js"
