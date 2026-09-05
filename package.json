@@ -1,0 +1,17 @@
+{
+  "name": "dev-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scripts specifically catered towards NitroBolt development",
+  "scripts": {
+    "full-ci": "node scripts/ci.js full",
+    "gui-ci": "node scripts/ci.js gui",
+    "checkout": "node scripts/checkout.js",
+    "sync": "node scripts/sync.js",
+    "experiment": "node scripts/experiment.js"
+  },
+  "author": "Cubester",
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.0"
+}
