@@ -1,6 +1,7 @@
 const LINKABLE_REPOSITORIES = [
   'scratch-vm',
   'scratch-blocks',
+  'scratch-l10n',
   'scratch-paint',
   'scratch-render',
   'scratch-parser'

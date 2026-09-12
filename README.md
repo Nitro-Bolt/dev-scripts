@@ -13,12 +13,13 @@ NitroBolt/
 
 Only recognized NitroBolt repositories that exist locally are used. Each CI command removes `node_modules`, checks out the repository's default branch unless branch preservation is enabled, and installs one repository at a time. `Nitron`, `scratch-storage`, and `scratchblocks` use `npm ci`. All other repositories use `pnpm install --frozen-lockfile`.
 
-When the relevant repositories are available, the link command registers `scratch-vm`, `scratch-blocks`, `scratch-render`, `scratch-parser`, and `scratch-paint` with `pnpm link`. It then links `scratch-parser` into `scratch-vm` and links all available GUI dependencies with one combined command. Both CI commands run the link command automatically after installation.
+When the relevant repositories are available, the link command registers `scratch-vm`, `scratch-blocks`, `scratch-l10n`, `scratch-render`, `scratch-parser`, and `scratch-paint` with `pnpm link`. It then links `scratch-parser` into `scratch-vm` and links all available GUI dependencies with one combined command. Both CI commands run the link command automatically after installation.
 
 ```
 scratch-parser -> scratch-vm
 scratch-vm     -> scratch-gui
 scratch-blocks -> scratch-gui
+scratch-l10n   -> scratch-gui
 scratch-paint  -> scratch-gui
 scratch-render -> scratch-gui
 ```
@@ -28,7 +29,7 @@ Any `package.json` and `pnpm-lock.yaml` changes made by `pnpm link` are reverted
 ## Commands
 
 - `pnpm run full-ci` processes every locally available NitroBolt repository.
-- `pnpm run gui-ci` processes only `scratch-gui`, `scratch-vm`, `scratch-blocks`, `scratch-paint`, `scratch-render`, and `scratch-parser`.
+- `pnpm run gui-ci` processes only `scratch-gui`, `scratch-vm`, `scratch-blocks`, `scratch-l10n`, `scratch-paint`, `scratch-render`, and `scratch-parser`.
 - `pnpm run link` links all locally available GUI repositories together.
 - `pnpm run checkout` checks out a matching branch in every locally available NitroBolt repository that contains it.
 - `pnpm run sync` safely synchronizes the current branch of every locally available NitroBolt repository.
