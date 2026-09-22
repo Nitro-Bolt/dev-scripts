@@ -23,6 +23,7 @@ const ALL_REPOSITORIES = [
   'Nitron',
   'packs',
   'scratchblocks',
+  'paper.js',
   'types'
 ];
 
