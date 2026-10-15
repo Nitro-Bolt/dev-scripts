@@ -18,18 +18,21 @@ const experimentsFile = path.join(experimentsDirectory, 'src', 'playground', 'ex
 
 const printUsage = () => {
   console.log(
-    'Usage: node scripts/experiment.js [--description <text>] [--status <text>]'
+    'Usage: node scripts/experiment.js [--name <text>] [--description <text>] [--status <text>]\n' +
+    '       node scripts/experiment.js --delete <experiment-id>'
   );
+};
+
+const isValidExperimentId = id => {
+  const isWindowsReservedName = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(id);
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) &&
+    !id.endsWith('.') &&
+    !isWindowsReservedName;
 };
 
 const getExperimentId = branch => {
   const id = branch.replace(/[\\/]+/g, '-');
-  const isWindowsReservedName = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(id);
-  if (
-    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) ||
-    id.endsWith('.') ||
-    isWindowsReservedName
-  ) {
+  if (!isValidExperimentId(id)) {
     fail(`The GUI branch name cannot be used as a cross-platform experiment folder: ${branch}`);
   }
   return id;
@@ -49,11 +52,16 @@ const assertRepository = (directory, name) => {
   }
 };
 
-const replaceExperiment = (sourceDirectory, destinationDirectory, metadata) => {
+const assertExperimentDestination = destinationDirectory => {
   const destinationParent = path.dirname(destinationDirectory);
   if (destinationParent !== path.resolve(experimentsStaticDirectory)) {
-    fail('Refusing to replace an experiment outside the experiments static directory.');
+    fail('Refusing to modify an experiment outside the experiments static directory.');
   }
+  return destinationParent;
+};
+
+const replaceExperiment = (sourceDirectory, destinationDirectory, metadata) => {
+  const destinationParent = assertExperimentDestination(destinationDirectory);
 
   const suffix = `${process.pid}-${Date.now()}`;
   const temporaryDirectory = path.join(destinationParent, `.experiment-${suffix}`);
@@ -104,9 +112,85 @@ const replaceExperiment = (sourceDirectory, destinationDirectory, metadata) => {
   }
 };
 
-const options = parseOptions(process.argv.slice(2), ['description', 'status'], printUsage);
-assertRepository(guiDirectory, 'scratch-gui');
+const deleteExperiment = (destinationDirectory, metadata) => {
+  const destinationParent = assertExperimentDestination(destinationDirectory);
+  const suffix = `${process.pid}-${Date.now()}`;
+  const backupDirectory = path.join(destinationParent, `.experiment-backup-${suffix}`);
+  const temporaryMetadata = `${experimentsFile}.${suffix}.tmp`;
+  const backupMetadata = `${experimentsFile}.${suffix}.backup`;
+  let backedUpDirectory = false;
+  let backedUpMetadata = false;
+
+  try {
+    fs.writeFileSync(temporaryMetadata, `${JSON.stringify(metadata, null, 2)}\n`);
+
+    if (fs.existsSync(destinationDirectory)) {
+      fs.renameSync(destinationDirectory, backupDirectory);
+      backedUpDirectory = true;
+    }
+
+    fs.renameSync(experimentsFile, backupMetadata);
+    backedUpMetadata = true;
+    fs.renameSync(temporaryMetadata, experimentsFile);
+  } catch (error) {
+    if (backedUpMetadata && fs.existsSync(backupMetadata)) {
+      if (fs.existsSync(experimentsFile)) fs.rmSync(experimentsFile, {force: true});
+      fs.renameSync(backupMetadata, experimentsFile);
+    }
+    if (backedUpDirectory && fs.existsSync(backupDirectory)) {
+      fs.renameSync(backupDirectory, destinationDirectory);
+    }
+    throw error;
+  } finally {
+    if (fs.existsSync(temporaryMetadata)) fs.rmSync(temporaryMetadata, {force: true});
+  }
+
+  try {
+    if (backedUpDirectory) fs.rmSync(backupDirectory, {recursive: true, force: true});
+    fs.rmSync(backupMetadata, {force: true});
+  } catch (error) {
+    console.warn(`Experiment was deleted, but a backup could not be removed: ${error.message}`);
+  }
+};
+
+const options = parseOptions(
+  process.argv.slice(2),
+  ['name', 'description', 'status', 'delete'],
+  printUsage
+);
+if (options.delete && (options.name || options.description || options.status)) {
+  fail('--delete cannot be combined with --name, --description, or --status.');
+}
+
 assertRepository(experimentsDirectory, 'experiments');
+let experiments;
+try {
+  experiments = JSON.parse(fs.readFileSync(experimentsFile, 'utf8'));
+} catch (error) {
+  fail(`Could not read experiments.json: ${error.message}`);
+}
+if (!Array.isArray(experiments)) fail('experiments.json must contain an array.');
+
+if (options.delete) {
+  const experimentId = options.delete;
+  if (!isValidExperimentId(experimentId)) fail(`Invalid experiment ID: ${experimentId}`);
+
+  const experimentIndex = experiments.findIndex(experiment => experiment?.id === experimentId);
+  if (experimentIndex === -1) fail(`Experiment not found: ${experimentId}`);
+
+  experiments.splice(experimentIndex, 1);
+  const destinationDirectory = path.resolve(experimentsStaticDirectory, experimentId);
+  try {
+    deleteExperiment(destinationDirectory, experiments);
+  } catch (error) {
+    fail(`Could not delete experiment ${experimentId}: ${error.message}`);
+  }
+
+  console.log(`Deleted experiment ${experimentId}.`);
+  process.exit(0);
+}
+
+assertRepository(guiDirectory, 'scratch-gui');
 requireCommand('git');
 requireCommand('pnpm');
 
@@ -120,16 +204,10 @@ if (BASE_BRANCHES.includes(branch)) {
 }
 
 const experimentId = getExperimentId(branch);
-let experiments;
-try {
-  experiments = JSON.parse(fs.readFileSync(experimentsFile, 'utf8'));
-} catch (error) {
-  fail(`Could not read experiments.json: ${error.message}`);
-}
-if (!Array.isArray(experiments)) fail('experiments.json must contain an array.');
 
-const existingIndex = experiments.findIndex(experiment => experiment.id === experimentId);
+const existingIndex = experiments.findIndex(experiment => experiment?.id === experimentId);
 const existingExperiment = experiments[existingIndex];
+const name = options.name || existingExperiment?.name || getDisplayName(branch);
 const description = options.description || existingExperiment?.description;
 const status = options.status || existingExperiment?.status;
 if (!description) fail('--description is required when creating a new experiment.');
@@ -137,7 +215,7 @@ if (!status) fail('--status is required when creating a new experiment.');
 
 const experiment = {
   id: experimentId,
-  name: existingExperiment?.name || getDisplayName(branch),
+  name,
   description,
   status
 };

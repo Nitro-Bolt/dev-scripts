@@ -97,7 +97,15 @@ Each installed repository is pulled from its current branch's upstream using fas
 Run the experiment command from a feature branch in `scratch-gui`:
 
 ```sh
-pnpm run experiment --description "Try the new editor feature" --status "Buggy"
+pnpm run experiment --name "New Editor" --description "Try the new editor feature" --status "Buggy"
 ```
 
-The GUI branch name becomes the experiment ID and folder name. Slashes are replaced with hyphens for cross-platform paths. The display name is generated from the final branch segment. If the experiment already exists, its compiled files are replaced and its metadata entry is updated. Existing description and status values are reused when their flags are omitted.
+The GUI branch name becomes the experiment ID and folder name. Slashes are replaced with hyphens for cross-platform paths. The optional `--name` flag sets the display name shown on the experiment card. Without it, a new experiment's display name is generated from the final branch segment. If the experiment already exists, its compiled files are replaced and its metadata entry is updated. Existing name, description, and status values are reused when their flags are omitted.
+
+Delete an experiment by its ID:
+
+```sh
+pnpm run experiment --delete experiment-id
+```
+
+Deletion removes both the experiment's metadata entry and its compiled folder. The `--delete` flag cannot be combined with creation or update flags.
