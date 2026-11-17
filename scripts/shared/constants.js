@@ -29,7 +29,6 @@ const ALL_REPOSITORIES = [
 
 const NPM_REPOSITORIES = [
   'Nitron',
-  'scratch-storage',
   'scratchblocks'
 ];
 
